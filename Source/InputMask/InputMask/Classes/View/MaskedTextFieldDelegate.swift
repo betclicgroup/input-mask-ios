@@ -277,21 +277,21 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         guard let strongPlaceholder = strongPlaceholder else {
             return
         }
-        
+        let userEntry = field.text ?? ""
+        let userEntryLength = userEntry.distance(from: userEntry.startIndex, to: userEntry.endIndex)
+
         let startIndex = strongPlaceholder.string.index(strongPlaceholder.string.startIndex,
-                                                        offsetBy: caretPosition(inField: field))
+                                                        offsetBy: userEntryLength)
         let substring = String(strongPlaceholder.string[startIndex...])
-        let attributedString = NSMutableAttributedString(string: (field.text ?? "") + substring)
-        let strongPlaceholderAttributes = strongPlaceholder.attributes(at: 0,
-                                                                       longestEffectiveRange: nil,
-                                                                       in: NSRange(location: 0, length: strongPlaceholder.length))
-        let substringRange = (attributedString.string as NSString).range(of: substring)
-        if let userEntry = field.text {
-            let firstSubstringRange = (attributedString.string as NSString).range(of: userEntry)
-            attributedString.addAttributes(_defaultAttribues, range: firstSubstringRange)
+
+        let attributedString = NSMutableAttributedString(string: userEntry, attributes: _defaultAttribues)
+        if !substring.isEmpty {
+            let strongPlaceholderAttributes = strongPlaceholder.attributes(at: 0,
+                                                                           longestEffectiveRange: nil,
+                                                                           in: NSRange(location: 0, length: strongPlaceholder.length))
+            attributedString.append(NSAttributedString(string: substring, attributes: strongPlaceholderAttributes))
         }
-        
-        attributedString.addAttributes(strongPlaceholderAttributes, range: substringRange)
+
         field.attributedText = attributedString
     }
     
@@ -329,13 +329,19 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
                 ),
                 autocomplete: self.autocomplete
             )
+
+            textField.text = ""
+            appendStrongPlaceholderIfNeeded(toField: textField)
+            _fieldValue = ""
+            setCaretPosition(0, inField: textField)
+
             self.listener?.textField?(
                 textField,
                 didFillMandatoryCharacters: result.complete,
                 didExtractValue: result.extractedValue
             )
         }
-        return shouldClear
+        return false
     }
     
     open func textFieldShouldReturn(_ textField: UITextField) -> Bool {
@@ -411,7 +417,12 @@ internal extension MaskedTextFieldDelegate {
         
         let from: UITextPosition = field.position(from: field.beginningOfDocument, offset: position)!
         let to:   UITextPosition = field.position(from: from, offset: 0)!
-        field.selectedTextRange = field.textRange(from: from, to: to)
+        let textRange = field.textRange(from: from, to: to)
+        field.selectedTextRange = textRange
         _oldCaretPosition = position
+
+        DispatchQueue.main.async { [field] in
+            field.selectedTextRange = textRange
+        }
     }
 }
