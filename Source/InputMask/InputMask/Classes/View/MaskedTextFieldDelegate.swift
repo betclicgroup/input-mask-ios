@@ -417,7 +417,12 @@ internal extension MaskedTextFieldDelegate {
         
         let from: UITextPosition = field.position(from: field.beginningOfDocument, offset: position)!
         let to:   UITextPosition = field.position(from: from, offset: 0)!
-        field.selectedTextRange = field.textRange(from: from, to: to)
+        let textRange = field.textRange(from: from, to: to)
+        field.selectedTextRange = textRange
         _oldCaretPosition = position
+
+        DispatchQueue.main.async { [field] in
+            field.selectedTextRange = textRange
+        }
     }
 }
