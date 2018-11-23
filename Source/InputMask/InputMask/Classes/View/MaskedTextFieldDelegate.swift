@@ -200,9 +200,7 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         } else {
             (extractedValue, complete) = self.modifyText(inRange: range, inField: textField, withText: string)
         }
-        
-        _fieldValue = extractedValue
-        
+
         self.listener?.textField?(
             textField,
             didFillMandatoryCharacters: complete,
@@ -235,6 +233,7 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         )
         
         field.text = result.formattedText.string
+        _fieldValue = result.formattedText.string
         appendStrongPlaceholderIfNeeded(toField: field)
         self.setCaretPosition(range.location, inField: field)
         
@@ -263,6 +262,7 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         )
         
         field.text = result.formattedText.string
+        _fieldValue = result.formattedText.string
         appendStrongPlaceholderIfNeeded(toField: field)
         
         let position: Int =
