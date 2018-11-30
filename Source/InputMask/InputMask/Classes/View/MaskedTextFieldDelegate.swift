@@ -46,7 +46,8 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
     private var _defaultAttribues = [NSAttributedStringKey: Any]()
     private var _oldCaretPosition = 0
     private var _fieldValue = ""
-    
+    private var _minimumTextLength = 0
+
     public var mask: Mask
     open var strongPlaceholder: NSAttributedString?
     
@@ -92,12 +93,13 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         super.init()
     }
     
-    public init(format: String, strongPlaceholder: NSAttributedString, andField field: UITextField? = nil) {
+    public init(format: String, strongPlaceholder: NSAttributedString, andField field: UITextField? = nil, minimumTextLength: Int = 0) {
         self._maskFormat = format
         self.mask = try! Mask.getOrCreate(withFormat: format)
         self._autocomplete = false
         self._autocompleteOnFocus = false
         self.strongPlaceholder = strongPlaceholder
+        self._minimumTextLength = minimumTextLength
         if let field = field {
             _defaultAttribues.reserveCapacity(field.defaultTextAttributes.count)
             for attribute in field.defaultTextAttributes {
@@ -125,7 +127,8 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         )
         
         field.text = result.formattedText.string
-        
+        _fieldValue = result.formattedText.string
+
         let position: Int =
             result.formattedText.string.distance(from: result.formattedText.string.startIndex, to: result.formattedText.caretPosition)
         
@@ -188,17 +191,20 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         _ textField: UITextField,
         shouldChangeCharactersIn range: NSRange,
         replacementString string: String) -> Bool {
-        
-        let extractedValue: String
-        let complete:       Bool
+
+        let result: (String, Bool)?
         
         if isDeletion(
             inRange: range,
             string: string
             ) {
-            (extractedValue, complete) = self.deleteText(inRange: range, inField: textField)
+            result = self.deleteText(inRange: range, inField: textField)
         } else {
-            (extractedValue, complete) = self.modifyText(inRange: range, inField: textField, withText: string)
+            result = self.modifyText(inRange: range, inField: textField, withText: string)
+        }
+
+        guard let (extractedValue, complete) = result else {
+            return false
         }
 
         self.listener?.textField?(
@@ -215,27 +221,34 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
     open func deleteText(
         inRange range: NSRange,
         inField field: UITextField
-        ) -> (String, Bool) {
+        ) -> (String, Bool)? {
         
         let inText = range.location >= _fieldValue.count ? field.text : _fieldValue
-        let text: String = self.replaceCharacters(
+        let updatedText: String = self.replaceCharacters(
             inText: inText,
             range: range,
             withCharacters: ""
         )
-        
+
+        if updatedText.count < _minimumTextLength {
+            return nil
+        }
+        if _minimumTextLength > 0, let inText = inText, inText.count >= _minimumTextLength, !updatedText.hasPrefix(inText.prefix(_minimumTextLength)) {
+            return nil
+        }
+
         let result: Mask.Result = self.mask.apply(
             toText: CaretString(
-                string: text,
-                caretPosition: text.index(text.startIndex, offsetBy: range.location)
+                string: updatedText,
+                caretPosition: updatedText.index(updatedText.startIndex, offsetBy: range.location)
             ),
             autocomplete: false
         )
-        
+
         field.text = result.formattedText.string
         _fieldValue = result.formattedText.string
         appendStrongPlaceholderIfNeeded(toField: field)
-        self.setCaretPosition(range.location, inField: field)
+        self.setCaretPosition(max(range.location, _minimumTextLength), inField: field)
         
         return (result.extractedValue, result.complete)
     }
@@ -244,7 +257,7 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         inRange range: NSRange,
         inField field: UITextField,
         withText text: String
-        ) -> (String, Bool) {
+        ) -> (String, Bool)? {
         
         let inText = range.location > _fieldValue.count ? field.text : _fieldValue
         let updatedText: String = self.replaceCharacters(
@@ -252,7 +265,14 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
             range: range,
             withCharacters: text
         )
-        
+
+        if updatedText.count < _minimumTextLength {
+            return nil
+        }
+        if _minimumTextLength > 0, let inText = inText, inText.count >= _minimumTextLength, !updatedText.hasPrefix(inText.prefix(_minimumTextLength)) {
+            return nil
+        }
+
         let result: Mask.Result = self.mask.apply(
             toText: CaretString(
                 string: updatedText,
@@ -267,7 +287,7 @@ open class MaskedTextFieldDelegate: NSObject, UITextFieldDelegate {
         
         let position: Int =
             result.formattedText.string.distance(from: result.formattedText.string.startIndex, to: result.formattedText.caretPosition)
-        self.setCaretPosition(position, inField: field)
+        self.setCaretPosition(max(position, _minimumTextLength), inField: field)
         
         return (result.extractedValue, result.complete)
     }
